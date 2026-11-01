@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OneBack</string>
+    <string name="service_name">OneBack floating back button</string>
+    <string name="service_description">Shows a floating button. Tap: Back. Drag: move it. Long press: hide it for 10 seconds. Cannot read screen content.</string>
+</resources>

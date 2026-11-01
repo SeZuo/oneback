@@ -1,0 +1,6 @@
+# Build output (publish the APK as a release asset instead)
+build/
+
+# Signing key: never publish
+*.keystore
+*.jks
