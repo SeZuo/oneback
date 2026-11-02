@@ -193,9 +193,53 @@ Column {
                     { "type": "s", "value": root.user }
                 ])
             }
+            // Just started: Android is still booting and can report OneBack as off for a while.
+            if (running && !transitioning) {
+                root.settling = true
+                settleAfterStart.restart()
+            }
             root.refresh()
         }
     }
+
+    // While AppSupport stops, starts or has only just started, the files the page reads are
+    // stale (generated_props from the last run, accessibility state not readable yet), so
+    // warnings about OneBack's state wait until it's up.
+    property bool settling: false
+    readonly property bool appSupportReady: appSupport.running && !appSupport.transitioning
+                                            && !restartRequested && !settling
+    readonly property bool appSupportChanging: appSupport.transitioning || restartRequested || settling
+
+    Timer {
+        id: settleAfterStart
+        interval: 20000
+        onTriggered: { root.settling = false; root.checkA11y(); root.refresh() }
+    }
+
+    function setBackground(allowed) {
+        error = ""
+        // Same call as the switch in Settings > Apps > OneBack.
+        apkdUser.typedCall("setAppStartOnBootup", [
+            { "type": "s", "value": "dev.local.oneback" },
+            { "type": "b", "value": allowed }
+        ], function() { root.refresh() }, function(err) { root.error = "Didn't work: " + err })
+    }
+
+    function uninstall() {
+        uninstalling = true
+        error = ""
+        systemd.typedCall("StartUnit", [
+            { "type": "s", "value": "oneback-uninstall@" + user + ".service" },
+            { "type": "s", "value": "replace" }
+        ], function() { }, function(err) {
+            root.uninstalling = false
+            root.error = "Didn't work: " + err
+        })
+    }
+
+    // Layout follows Jolla's own sections (e.g. Backup in Settings > Sailfish OS updates):
+    // one short hint, settings as switches, actions as icon rows. A row either acts right away
+    // (open, restart) or opens its own page (uninstall, confirmed there with Accept).
 
     SectionHeader {
         text: "OneBack"
@@ -204,64 +248,102 @@ Column {
     Label {
         x: Theme.horizontalPageMargin
         width: parent.width - 2 * Theme.horizontalPageMargin
+        height: implicitHeight + Theme.paddingSmall
         wrapMode: Text.Wrap
-        color: Theme.highlightColor
+        font.pixelSize: Theme.fontSizeExtraSmall
+        // Red while OneBack isn't working yet (the cases below that need the user to act);
+        // the usual description colour when it works or the text is only informational.
+        readonly property bool needsSetup: !root.uninstalling
+                && (!root.installed
+                    || root.installedVersion === root.bundledVersion && root.appSupportReady
+                       && root.a11yState !== "" && root.a11yState !== "unknown" && !root.serviceOn)
+        color: needsSetup ? Theme.errorColor : Theme.secondaryHighlightColor
         text: {
+            if (root.uninstalling)
+                return "Uninstalling: Android AppSupport restarts with the navigation bar, then OneBack and this section are removed. This takes a minute."
             if (!root.installed)
-                return "OneBack isn't installed. Install it again with the button below; it comes with this package."
+                return "OneBack isn't installed. It comes with this package, install it again below."
             if (root.installedVersion !== root.bundledVersion)
                 return "OneBack " + root.installedVersion + " is installed. This package includes version "
                         + root.bundledVersion + "."
+            if (root.appSupportChanging)
+                return "Android AppSupport is restarting. OneBack's state shows here once it's up."
             if (!appSupport.running || root.a11yState === "unknown")
                 return "OneBack is installed. Start Android AppSupport to see whether it's switched on."
             if (!root.backgroundAllowed)
-                return "OneBack isn't allowed to run in the background, so Sailfish stops it whenever you leave it. Allow it below."
+                return "OneBack isn't allowed to run in the background, so Sailfish stops it whenever you leave it. Switch on Run in background below."
             if (root.a11yState === "crashed")
                 return "OneBack is switched on, but Android stopped it. Open OneBack, go to the accessibility settings and switch it off and on again."
             if (!root.serviceOn)
-                return "OneBack is installed, but switched off in the accessibility settings. Open OneBack to switch it on."
+                return "OneBack is switched off in the accessibility settings. Open OneBack to switch it on."
             return "OneBack is installed and switched on."
         }
     }
 
-    Item { width: 1; height: Theme.paddingMedium }
-
-    ButtonLayout {
+    BackgroundItem {
+        id: openRow
         visible: root.installed
-        Button {
-            enabled: appSupport.running
+        enabled: appSupport.running && !root.uninstalling
+        height: Math.max(implicitHeight, openLabel.height + 2 * Theme.paddingSmall)
+        onClicked: root.openOneBack()
+
+        Icon {
+            id: openIcon
+            x: Theme.horizontalPageMargin
+            anchors.verticalCenter: parent.verticalCenter
+            source: "image://theme/icon-m-android"
+            highlighted: openRow.highlighted
+            opacity: openRow.enabled ? 1.0 : Theme.opacityLow
+        }
+        Label {
+            id: openLabel
+            anchors {
+                left: openIcon.right
+                leftMargin: Theme.paddingMedium
+                right: parent.right
+                rightMargin: Theme.horizontalPageMargin
+                verticalCenter: parent.verticalCenter
+            }
+            wrapMode: Text.Wrap
+            color: openRow.highlighted ? Theme.highlightColor : Theme.primaryColor
+            opacity: openRow.enabled ? 1.0 : Theme.opacityLow
             text: "Open OneBack"
-            onClicked: root.openOneBack()
         }
     }
 
-    Item { width: 1; height: Theme.paddingMedium; visible: root.installed }
-
-    ButtonLayout {
-        visible: root.installed && !root.backgroundAllowed
-        Button {
-            text: "Allow in background"
-            // Same call as the switch in Settings > Apps > OneBack.
-            onClicked: apkdUser.typedCall("setAppStartOnBootup", [
-                { "type": "s", "value": "dev.local.oneback" },
-                { "type": "b", "value": true }
-            ], function() { root.refresh() }, function(err) { root.error = "Didn't work: " + err })
-        }
-    }
-
-    Item { width: 1; height: Theme.paddingMedium; visible: root.installed && !root.backgroundAllowed }
-
-    ButtonLayout {
+    BackgroundItem {
+        id: installRow
         visible: !root.installed || root.installedVersion !== root.bundledVersion
-        Button {
-            enabled: !root.busy && appSupport.running
+        enabled: !root.busy && appSupport.running && !root.uninstalling
+        height: Math.max(implicitHeight, installLabel.height + 2 * Theme.paddingSmall)
+        onClicked: root.startUnit("oneback-install@" + root.user + ".service")
+
+        Icon {
+            id: installIcon
+            x: Theme.horizontalPageMargin
+            anchors.verticalCenter: parent.verticalCenter
+            source: "image://theme/icon-m-device-download"
+            highlighted: installRow.highlighted
+            opacity: installRow.enabled ? 1.0 : Theme.opacityLow
+        }
+        Label {
+            id: installLabel
+            anchors {
+                left: installIcon.right
+                leftMargin: Theme.paddingMedium
+                right: parent.right
+                rightMargin: Theme.horizontalPageMargin
+                verticalCenter: parent.verticalCenter
+            }
+            wrapMode: Text.Wrap
+            color: installRow.highlighted ? Theme.highlightColor : Theme.primaryColor
+            opacity: installRow.enabled ? 1.0 : Theme.opacityLow
             text: root.installed ? "Update OneBack" : "Install OneBack"
-            onClicked: root.startUnit("oneback-install@" + root.user + ".service")
         }
     }
 
     Label {
-        visible: (!root.installed || root.installedVersion !== root.bundledVersion) && !appSupport.running
+        visible: installRow.visible && !appSupport.running
         x: Theme.horizontalPageMargin
         width: parent.width - 2 * Theme.horizontalPageMargin
         wrapMode: Text.Wrap
@@ -270,27 +352,78 @@ Column {
         text: "Start Android AppSupport first. OneBack is also installed automatically the next time it starts."
     }
 
+    // The two switches are laid out like the page's own AppSupportSwitch (icon on the right,
+    // description below at full width), which can't show the busy spinner the bar switch needs.
+
+    // Settings > Apps > OneBack has the same switch.
+    Column {
+        visible: root.installed
+        width: parent.width
+        bottomPadding: Theme.paddingLarge + Theme.paddingMedium
+        spacing: Theme.paddingMedium
+
+        IconTextSwitch {
+            id: backgroundSwitch
+            text: "Run in background"
+            icon.source: "image://theme/icon-m-battery"
+            automaticCheck: false
+            checked: root.backgroundAllowed
+            enabled: !root.uninstalling
+            onClicked: root.setBackground(!root.backgroundAllowed)
+        }
+
+        Label {
+            x: Theme.horizontalPageMargin
+            width: parent.width - 2 * Theme.horizontalPageMargin
+            wrapMode: Text.Wrap
+            font.pixelSize: Theme.fontSizeExtraSmall
+            color: Theme.secondaryHighlightColor
+            opacity: backgroundSwitch.enabled ? 1.0 : Theme.opacityLow
+            text: "Needed for the Back button: without it, Sailfish stops OneBack whenever you leave it."
+        }
+    }
+
     // On = the bar is shown (Android's default). Off = hidden, OneBack does Back instead.
-    TextSwitch {
-        text: "Android navigation bar"
-        description: root.hidden || root.installed && root.serviceOn
-                     ? "Turn off to hide the bar at the bottom of Android apps and use the OneBack button for Back instead."
-                     : "Can only be turned off while OneBack is on, so Android apps always have a Back."
-        automaticCheck: false
-        checked: !root.hidden
-        busy: root.busy
-        // Hiding needs OneBack on; showing the bar again is always allowed.
-        enabled: !root.busy && (root.hidden || root.installed && root.serviceOn)
-        // The hide helper checks again itself and refuses while OneBack is off.
-        onClicked: root.startUnit(root.hidden ? "oneback-navbar-show.service"
-                                              : "oneback-navbar-hide@" + root.user + ".service")
+    Column {
+        width: parent.width
+        bottomPadding: Theme.paddingLarge + Theme.paddingMedium
+        spacing: Theme.paddingMedium
+
+        IconTextSwitch {
+            id: navbarSwitch
+            text: "Android navigation bar"
+            icon.source: "image://theme/icon-m-back"
+            automaticCheck: false
+            checked: !root.hidden
+            busy: root.busy
+            // Hiding needs OneBack on; showing the bar again is always allowed.
+            enabled: !root.busy && !root.uninstalling && (root.hidden || root.installed && root.serviceOn)
+            // The hide helper checks again itself and refuses while OneBack is off.
+            onClicked: root.startUnit(root.hidden ? "oneback-navbar-show.service"
+                                                  : "oneback-navbar-hide@" + root.user + ".service")
+        }
+
+        Label {
+            x: Theme.horizontalPageMargin
+            width: parent.width - 2 * Theme.horizontalPageMargin
+            wrapMode: Text.Wrap
+            font.pixelSize: Theme.fontSizeExtraSmall
+            color: Theme.secondaryHighlightColor
+            opacity: navbarSwitch.enabled || root.busy ? 1.0 : Theme.opacityLow
+            text: root.hidden || root.installed && root.serviceOn
+                  ? "Turn off to hide the bar at the bottom of Android apps and use the OneBack button for Back instead."
+                  : "Can only be turned off while OneBack is on, so Android apps always have a Back."
+        }
     }
 
     Label {
-        visible: root.hideApplied && !root.serviceOn
+        visible: root.appSupportReady && root.hideApplied && !root.serviceOn && !root.uninstalling
+            && root.a11yState !== "" && root.a11yState !== "unknown"
         x: Theme.horizontalPageMargin
         width: parent.width - 2 * Theme.horizontalPageMargin
+        height: implicitHeight + Theme.paddingLarge
         wrapMode: Text.Wrap
+        font.pixelSize: Theme.fontSizeExtraSmall
         color: Theme.errorColor
         text: "The navigation bar is hidden but OneBack is off, so Android apps have no Back. Switch OneBack on, or turn the navigation bar back on and restart."
     }
@@ -307,68 +440,130 @@ Column {
     }
 
     Label {
-        visible: root.needsRestart || root.restartRequested
+        visible: (root.needsRestart || root.restartRequested) && !root.uninstalling
         x: Theme.horizontalPageMargin
         width: parent.width - 2 * Theme.horizontalPageMargin
-        wrapMode: Text.Wrap
-        color: Theme.highlightColor
-        text: "Restart Android AppSupport to apply this. Running Android apps are closed."
-    }
-
-    Item {
-        visible: root.needsRestart || root.restartRequested
-        width: 1
-        height: Theme.paddingLarge
-    }
-
-    ButtonLayout {
-        visible: root.needsRestart || root.restartRequested
-        Button {
-            enabled: !appSupport.transitioning && !root.restartRequested
-            text: "Restart Android AppSupport"
-            onClicked: root.restartAppSupport()
-        }
-    }
-
-    Item { width: 1; height: Theme.paddingLarge }
-
-    Label {
-        x: Theme.horizontalPageMargin
-        width: parent.width - 2 * Theme.horizontalPageMargin
+        height: implicitHeight + Theme.paddingSmall
         wrapMode: Text.Wrap
         font.pixelSize: Theme.fontSizeExtraSmall
         color: Theme.secondaryHighlightColor
-        text: root.uninstalling
-              ? "Uninstalling: Android AppSupport restarts with the navigation bar, then OneBack and this section are removed. This takes a minute."
-              : "Uninstalling shows the navigation bar again, restarts Android AppSupport (running Android apps are closed) and removes OneBack and this section."
+        text: "Restart Android AppSupport to apply this. Running Android apps are closed."
     }
 
-    Item { width: 1; height: Theme.paddingMedium }
+    BackgroundItem {
+        id: restartRow
+        visible: (root.needsRestart || root.restartRequested) && !root.uninstalling
+        enabled: !appSupport.transitioning && !root.restartRequested
+        height: Math.max(implicitHeight, restartLabel.height + 2 * Theme.paddingSmall)
+        onClicked: root.restartAppSupport()
 
-    ButtonLayout {
-        Button {
-            enabled: !root.busy && !root.uninstalling
-            text: "Uninstall OneBack"
-            onClicked: remorse.execute("Uninstalling OneBack", function() {
-                root.uninstalling = true
-                systemd.typedCall("StartUnit", [
-                    { "type": "s", "value": "oneback-uninstall@" + root.user + ".service" },
-                    { "type": "s", "value": "replace" }
-                ], function() { }, function(err) {
-                    root.uninstalling = false
-                    root.error = "Didn't work: " + err
-                })
-            })
+        Icon {
+            id: restartIcon
+            x: Theme.horizontalPageMargin
+            anchors.verticalCenter: parent.verticalCenter
+            source: "image://theme/icon-m-reload"
+            highlighted: restartRow.highlighted
+            opacity: restartRow.enabled ? 1.0 : Theme.opacityLow
+        }
+        Label {
+            id: restartLabel
+            anchors {
+                left: restartIcon.right
+                leftMargin: Theme.paddingMedium
+                right: parent.right
+                rightMargin: Theme.horizontalPageMargin
+                verticalCenter: parent.verticalCenter
+            }
+            wrapMode: Text.Wrap
+            color: restartRow.highlighted ? Theme.highlightColor : Theme.primaryColor
+            opacity: restartRow.enabled ? 1.0 : Theme.opacityLow
+            text: root.restartRequested ? "Restarting Android AppSupport…" : "Restart Android AppSupport"
         }
     }
 
-    RemorsePopup { id: remorse }
+    BackgroundItem {
+        id: uninstallRow
+        enabled: !root.busy && !root.uninstalling
+        height: Math.max(implicitHeight, uninstallLabel.height + 2 * Theme.paddingSmall)
+        onClicked: pageStack.animatorPush(uninstallDialog)
+
+        Icon {
+            id: uninstallIcon
+            x: Theme.horizontalPageMargin
+            anchors.verticalCenter: parent.verticalCenter
+            source: "image://theme/icon-m-delete"
+            highlighted: uninstallRow.highlighted
+            opacity: uninstallRow.enabled ? 1.0 : Theme.opacityLow
+        }
+        Label {
+            id: uninstallLabel
+            anchors {
+                left: uninstallIcon.right
+                leftMargin: Theme.paddingMedium
+                right: parent.right
+                rightMargin: Theme.horizontalPageMargin
+                verticalCenter: parent.verticalCenter
+            }
+            wrapMode: Text.Wrap
+            color: uninstallRow.highlighted ? Theme.highlightColor : Theme.primaryColor
+            opacity: uninstallRow.enabled ? 1.0 : Theme.opacityLow
+            text: "Uninstall OneBack"
+        }
+    }
+
+    // Own page for the one destructive action; Accept (or swiping forward) uninstalls.
+    Component {
+        id: uninstallDialog
+
+        Dialog {
+            onAccepted: root.uninstall()
+
+            Column {
+                width: parent.width
+
+                DialogHeader {
+                    acceptText: "Uninstall"
+                }
+
+                Label {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * Theme.horizontalPageMargin
+                    wrapMode: Text.Wrap
+                    color: Theme.highlightColor
+                    font.pixelSize: Theme.fontSizeLarge
+                    text: "Uninstall OneBack?"
+                }
+
+                Item { width: 1; height: Theme.paddingLarge }
+
+                Label {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * Theme.horizontalPageMargin
+                    wrapMode: Text.Wrap
+                    color: Theme.highlightColor
+                    text: "The navigation bar is shown again, Android AppSupport restarts (running Android apps are closed), and OneBack and its section in these settings are removed."
+                }
+
+                Item { width: 1; height: Theme.paddingLarge }
+
+                Label {
+                    x: Theme.horizontalPageMargin
+                    width: parent.width - 2 * Theme.horizontalPageMargin
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.secondaryHighlightColor
+                    text: "Accept to uninstall, or go back to keep OneBack."
+                }
+            }
+        }
+    }
 
     Label {
         visible: root.error !== ""
         x: Theme.horizontalPageMargin
         width: parent.width - 2 * Theme.horizontalPageMargin
         wrapMode: Text.Wrap
+        font.pixelSize: Theme.fontSizeExtraSmall
         color: Theme.errorColor
         text: root.error
     }

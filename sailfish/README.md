@@ -3,7 +3,7 @@
 One package for Storeman/OpenRepos that brings everything:
 
 - **OneBack APK**, installed into Android AppSupport automatically: right away if AppSupport is running, otherwise the next time it starts. Updating the package updates OneBack.
-- **A OneBack section in Settings → Android AppSupport**: shows whether OneBack is installed and on, can install/update and open it, and has an **Android navigation bar** switch (on = shown, the default). Turning it off is only possible while OneBack is on, so Android apps always have a Back. A button restarts AppSupport to apply the change.
+- **A OneBack section in Settings → Android AppSupport**: shows whether OneBack is installed and on, can install/update and open it, has a **Run in background** switch (the same as Settings → Apps → OneBack) and an **Android navigation bar** switch (on = shown, the default). Turning it off is only possible while OneBack is on, so Android apps always have a Back. A row restarts AppSupport to apply the change. Actions are icon rows like in Jolla's own sections; uninstalling is confirmed on its own page.
 
 ## How it works
 
@@ -14,7 +14,7 @@ One package for Storeman/OpenRepos that brings everything:
 | `/usr/libexec/oneback/navbar` + `oneback-navbar-hide@.service`, `oneback-navbar-show.service` | Root helper: writes or deletes `/etc/appsupport.conf.d/90-oneback-navbar.conf` (`CustomProperties=qemu.hw.mainkeys=1`). Hiding refuses unless OneBack is on (it runs the check itself) |
 | `/usr/libexec/oneback/check` + `oneback-check@.service` | Root helper: reads `enabled_accessibility_services` from the user's AppSupport container and writes `on`/`off`/`unknown` to `/run/oneback/a11y-<user>` for the page |
 | `/usr/libexec/oneback/install` + `oneback-install@.service` | Root helper: `appsupport-pm -i <user> install` of the bundled APK |
-| `/usr/libexec/oneback/uninstall` + `oneback-uninstall@.service` | Root helper for the **Uninstall OneBack** button: shows the bar, restarts AppSupport, uninstalls the app, removes the package, in that order so Android apps never lose their Back |
+| `/usr/libexec/oneback/uninstall` + `oneback-uninstall@.service` | Root helper for **Uninstall OneBack** (accepted on its confirmation page): shows the bar, restarts AppSupport, uninstalls the app, removes the package, in that order so Android apps never lose their Back |
 | `appsupport@.service.d/90-oneback.conf` | When AppSupport starts with an install pending (`/var/lib/oneback/pending-<user>`), runs the install |
 | `/usr/share/polkit-1/rules.d/49-oneback.rules` | Lets the user at the device **start** exactly these units (install only for their own user). Nothing else |
 
