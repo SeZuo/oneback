@@ -43,6 +43,8 @@ public class BackService extends AccessibilityService {
 
     /** Top-left corner and size of the button at normal size; lp is derived from these. */
     private int posX, posY, size;
+    /** False until the user has moved the button: then the default spot is used (see shownX). */
+    private boolean hasPos;
 
     private float downRawX, downRawY;
     private int startX, startY;
@@ -89,8 +91,8 @@ public class BackService extends AccessibilityService {
                 case MotionEvent.ACTION_DOWN:
                     downRawX = e.getRawX();
                     downRawY = e.getRawY();
-                    startX = posX;
-                    startY = posY;
+                    startX = shownX();
+                    startY = shownY();
                     pressed = true;
                     moved = armed = dragging = false;
                     tapBack = Prefs.tap(prefs);
@@ -111,7 +113,9 @@ public class BackService extends AccessibilityService {
                     if (dragging) {
                         posX = startX + Math.round(dx);
                         posY = startY + Math.round(dy);
-                        clamp();
+                        hasPos = true;
+                        posX = shownX();   // dragged: keep it where it's drawn
+                        posY = shownY();
                         layout();
                     }
                     return true;
@@ -174,20 +178,20 @@ public class BackService extends AccessibilityService {
         if (button == null) return;
         DisplayMetrics dm = getResources().getDisplayMetrics();
         size = Math.round(Prefs.sizeDp(prefs) * dm.density);
-        posX = prefs.getInt(Prefs.X, dm.widthPixels - size - Math.round(8 * dm.density));
-        posY = prefs.getInt(Prefs.Y, Math.round(dm.heightPixels * 0.75f));
-        clamp();
+        hasPos = prefs.contains(Prefs.X) && prefs.contains(Prefs.Y);
+        posX = prefs.getInt(Prefs.X, 0);
+        posY = prefs.getInt(Prefs.Y, 0);
         idleAlpha = Prefs.alpha(prefs);
         if (!pressed) button.setAlpha(idleAlpha);
         layout();
     }
 
-    /** Window from posX/posY/size; while armed it is larger, around the same centre. */
+    /** Window at the shown position; while armed it is larger, around the same centre. */
     private void layout() {
         int s = armed ? Math.round(size * ARMED_SCALE) : size;
         lp.width = lp.height = s;
-        lp.x = posX - (s - size) / 2;
-        lp.y = posY - (s - size) / 2;
+        lp.x = shownX() - (s - size) / 2;
+        lp.y = shownY() - (s - size) / 2;
         if (button.isAttachedToWindow()) wm.updateViewLayout(button, lp);
     }
 
@@ -199,11 +203,24 @@ public class BackService extends AccessibilityService {
         button.setVisibility(landscape || hiddenByLongPress ? View.GONE : View.VISIBLE);
     }
 
-    /** Keep the button (at normal size) fully on screen, also after rotation. */
-    private void clamp() {
+    /*
+     * posX/posY are where the user put the button and are never changed to fit the screen:
+     * the shown position is clamped to the current screen instead. Clamping posX/posY itself
+     * (up to 1.5) moved the button for good whenever the screen got smaller for a moment,
+     * e.g. in landscape (1032 high instead of 2272), so back in portrait it sat mid-screen.
+     * Without a saved position the default spot (right edge, 3/4 down) is worked out from the
+     * current screen each time, not once at start, so it's right after rotating too.
+     */
+    private int shownX() {
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        posX = Math.max(0, Math.min(posX, dm.widthPixels - size));
-        posY = Math.max(0, Math.min(posY, dm.heightPixels - size));
+        int x = hasPos ? posX : dm.widthPixels - size - Math.round(8 * dm.density);
+        return Math.max(0, Math.min(x, dm.widthPixels - size));
+    }
+
+    private int shownY() {
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int y = hasPos ? posY : Math.round(dm.heightPixels * 0.75f);
+        return Math.max(0, Math.min(y, dm.heightPixels - size));
     }
 
     @Override
@@ -211,7 +228,6 @@ public class BackService extends AccessibilityService {
         super.onConfigurationChanged(newConfig);
         if (button != null) {
             updateVisibility();
-            clamp();
             layout();
         }
     }
