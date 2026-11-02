@@ -14,6 +14,7 @@ One package for Storeman/OpenRepos that brings everything:
 | `/usr/libexec/oneback/navbar` + `oneback-navbar-hide@.service`, `oneback-navbar-show.service` | Root helper: writes or deletes `/etc/appsupport.conf.d/90-oneback-navbar.conf` (`CustomProperties=qemu.hw.mainkeys=1`). Hiding refuses unless OneBack is on (it runs the check itself) |
 | `/usr/libexec/oneback/check` + `oneback-check@.service` | Root helper: reads `enabled_accessibility_services` from the user's AppSupport container and writes `on`/`off`/`unknown` to `/run/oneback/a11y-<user>` for the page |
 | `/usr/libexec/oneback/install` + `oneback-install@.service` | Root helper: `appsupport-pm -i <user> install` of the bundled APK |
+| `/usr/libexec/oneback/uninstall` + `oneback-uninstall@.service` | Root helper for the **Uninstall OneBack** button: shows the bar, restarts AppSupport, uninstalls the app, removes the package, in that order so Android apps never lose their Back |
 | `appsupport@.service.d/90-oneback.conf` | When AppSupport starts with an install pending (`/var/lib/oneback/pending-<user>`), runs the install |
 | `/usr/share/polkit-1/rules.d/49-oneback.rules` | Lets the user at the device **start** exactly these units (install only for their own user). Nothing else |
 
@@ -23,7 +24,9 @@ Whether OneBack is on is read from Android's own setting, not from anything OneB
 
 ## Uninstall
 
-Removing the package deletes the config file, so the bar comes back after the next AppSupport restart. OneBack itself stays installed; remove it in Settings → Apps.
+The package has no icon in the app grid, so it's uninstalled from its own section: **Uninstall OneBack** at the bottom of Settings → Android AppSupport → OneBack. It shows the bar again, restarts AppSupport, uninstalls the OneBack app and removes the package, in that order.
+
+Removing the package any other way (Storeman, `devel-su pkcon remove oneback`) deletes the config file too, so the bar comes back after the next AppSupport restart, but leaves the OneBack app installed (remove it in Settings → Apps once the bar is back).
 
 ## Build
 

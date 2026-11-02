@@ -43,6 +43,7 @@ Column {
     property bool handOther: false         // ... and holds other settings, so it can't be removed
     property bool hideApplied: false       // running AppSupport has mainkeys=1
     property bool busy: false
+    property bool uninstalling: false
     property bool restartRequested: false
     property string error: ""
 
@@ -328,6 +329,40 @@ Column {
             onClicked: root.restartAppSupport()
         }
     }
+
+    Item { width: 1; height: Theme.paddingLarge }
+
+    Label {
+        x: Theme.horizontalPageMargin
+        width: parent.width - 2 * Theme.horizontalPageMargin
+        wrapMode: Text.Wrap
+        font.pixelSize: Theme.fontSizeExtraSmall
+        color: Theme.secondaryHighlightColor
+        text: root.uninstalling
+              ? "Uninstalling: Android AppSupport restarts with the navigation bar, then OneBack and this section are removed. This takes a minute."
+              : "Uninstalling shows the navigation bar again, restarts Android AppSupport (running Android apps are closed) and removes OneBack and this section."
+    }
+
+    Item { width: 1; height: Theme.paddingMedium }
+
+    ButtonLayout {
+        Button {
+            enabled: !root.busy && !root.uninstalling
+            text: "Uninstall OneBack"
+            onClicked: remorse.execute("Uninstalling OneBack", function() {
+                root.uninstalling = true
+                systemd.typedCall("StartUnit", [
+                    { "type": "s", "value": "oneback-uninstall@" + root.user + ".service" },
+                    { "type": "s", "value": "replace" }
+                ], function() { }, function(err) {
+                    root.uninstalling = false
+                    root.error = "Didn't work: " + err
+                })
+            })
+        }
+    }
+
+    RemorsePopup { id: remorse }
 
     Label {
         visible: root.error !== ""

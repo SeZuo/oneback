@@ -6,7 +6,7 @@
 
 Name:       oneback
 Version:    %{oneback_version}
-Release:    1
+Release:    2
 Summary:    Floating Back button for Android apps, and a switch to hide the navigation bar
 License:    MIT
 URL:        https://github.com/lorenz-graf/oneback
@@ -39,6 +39,8 @@ sed -i 's/@VERSION@/%{version}/' $P/oneback.qml
 install -D -m 0755 $S/navbar.sh                   %{buildroot}%{_libexecdir}/oneback/navbar
 install -D -m 0755 $S/install.sh                  %{buildroot}%{_libexecdir}/oneback/install
 install -D -m 0755 $S/check.sh                    %{buildroot}%{_libexecdir}/oneback/check
+install -D -m 0755 $S/uninstall.sh                %{buildroot}%{_libexecdir}/oneback/uninstall
+install -D -m 0644 $S/oneback-uninstall@.service  %{buildroot}%{_unitdir}/oneback-uninstall@.service
 install -D -m 0644 $S/oneback-navbar-hide@.service %{buildroot}%{_unitdir}/oneback-navbar-hide@.service
 install -D -m 0644 $S/oneback-check@.service      %{buildroot}%{_unitdir}/oneback-check@.service
 install -D -m 0644 $S/oneback-navbar-show.service %{buildroot}%{_unitdir}/oneback-navbar-show.service
@@ -73,6 +75,8 @@ systemctl daemon-reload >/dev/null 2>&1 || :
 %{_libexecdir}/oneback/navbar
 %{_libexecdir}/oneback/install
 %{_libexecdir}/oneback/check
+%{_libexecdir}/oneback/uninstall
+%{_unitdir}/oneback-uninstall@.service
 %{_unitdir}/oneback-navbar-hide@.service
 %{_unitdir}/oneback-check@.service
 %{_unitdir}/oneback-navbar-show.service

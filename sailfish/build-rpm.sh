@@ -13,7 +13,7 @@ VERSION=$(sed -n 's/.*--version-name \([0-9.]*\).*/\1/p' ../build.sh)
 
 TOP=$(pwd)/build
 rm -rf "$TOP" && mkdir -p "$TOP/SOURCES"
-cp oneback-plugin.qml navbar.sh install.sh check.sh ./*.service appsupport-oneback.conf 49-oneback.rules \
+cp oneback-plugin.qml navbar.sh install.sh check.sh uninstall.sh ./*.service appsupport-oneback.conf 49-oneback.rules \
     "$TOP/SOURCES/"
 cp ../build/oneback.apk ../LICENSE "$TOP/SOURCES/"
 

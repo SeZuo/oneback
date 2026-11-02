@@ -7,8 +7,9 @@
  * user's own AppSupport instance. The units take no input from the caller:
  * check reads whether OneBack is on in the accessibility settings, hide/show
  * write or delete one fixed config file (hide only while OneBack is on),
- * install installs the APK shipped in this package. Everything else keeps
- * its default policy.
+ * install installs the APK shipped in this package, uninstall shows the bar,
+ * restarts AppSupport and removes OneBack and this package. Everything else
+ * keeps its default policy.
  */
 polkit.addRule(function(action, subject) {
     if (action.id !== "org.freedesktop.systemd1.manage-units") {
@@ -24,7 +25,8 @@ polkit.addRule(function(action, subject) {
     if (unit === "oneback-navbar-show.service" ||
             unit === "oneback-navbar-hide@" + subject.user + ".service" ||
             unit === "oneback-check@" + subject.user + ".service" ||
-            unit === "oneback-install@" + subject.user + ".service") {
+            unit === "oneback-install@" + subject.user + ".service" ||
+            unit === "oneback-uninstall@" + subject.user + ".service") {
         return polkit.Result.YES;
     }
     return polkit.Result.NOT_HANDLED;

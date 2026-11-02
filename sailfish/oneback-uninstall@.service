@@ -1,0 +1,7 @@
+[Unit]
+Description=OneBack: show the navigation bar, restart AppSupport, remove OneBack for %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/oneback/uninstall %i
+TimeoutStartSec=600

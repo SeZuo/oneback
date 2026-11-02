@@ -74,7 +74,7 @@ grep mainkeys /tmp/appsupport/defaultuser/generated_props
 
 - **Bar (package):** turn **Android navigation bar** on in Settings → Android AppSupport → OneBack and restart AppSupport.
 - **Bar (by hand):** delete `/etc/appsupport.conf.d/90-hide-navbar.conf` (as root) and Stop/Start AppSupport. If the package is installed, its switch also removes this file when it holds nothing else.
-- **Package:** uninstall it in Storeman or with `devel-su pkcon remove oneback`. That removes its config file, so the bar comes back after the next AppSupport restart. OneBack itself stays installed.
+- **Package:** Settings → Android AppSupport → OneBack → **Uninstall OneBack**. It shows the bar again, restarts AppSupport, then removes the OneBack app and the package, so Android apps never lose their Back. Removing the package in Storeman or with `devel-su pkcon remove oneback` also brings the bar back after the next AppSupport restart, but leaves the OneBack app installed.
 - **OneBack:** switch it off in the accessibility settings (OneBack app → Accessibility settings), or uninstall it in Settings → Apps.
 
 While the bar is hidden, don't switch OneBack off, or you'll only have the apps' own back arrows.
