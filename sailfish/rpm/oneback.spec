@@ -6,7 +6,7 @@
 
 Name:       oneback
 Version:    %{oneback_version}
-Release:    2
+Release:    1
 Summary:    Floating Back button for Android apps, and a switch to hide the navigation bar
 License:    MIT
 URL:        https://github.com/lorenz-graf/oneback
