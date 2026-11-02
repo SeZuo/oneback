@@ -2,12 +2,13 @@
 
 A one-tap floating Back button for Android apps on **Sailfish OS (Android AppSupport)**. Together with one config line, it replaces the big bar at the bottom of every Android app that holds only a back button.
 
-| | |
-|---|---|
-| Tap | Back |
-| Drag | Move the button (position is remembered) |
-| Long press | Hide it for 10 seconds |
-| Landscape | Hidden automatically |
+| | Tap mode (default) | Swipe mode |
+|---|---|---|
+| Back | Tap | Swipe starting on the button (any direction) |
+| Move the button (position is remembered) | Drag | Long press, then drag |
+| Hide it for a few seconds (10 by default) | Long press | Long press and release |
+
+In swipe mode a plain tap does nothing. In landscape the button is hidden automatically.
 
 Tested on the Jolla Phone (2026), Sailfish OS 5.2.0.22, AppSupport (Android 15).
 
@@ -17,13 +18,17 @@ OneBack is an Android **accessibility service**, which is how it can send a syst
 
 - It **can't read screen content** (`canRetrieveWindowContent="false"`) and has no internet permission.
 - It asks for no other permissions. The button is an accessibility overlay, so "display over other apps" isn't needed.
-- The whole app is about 150 lines of Java: [`BackService.java`](src/dev/local/oneback/BackService.java).
+- The button is [`BackService.java`](src/dev/local/oneback/BackService.java), about 200 lines; the settings screen is [`MainActivity.java`](src/dev/local/oneback/MainActivity.java).
 
 ## Install
 
 1. Download `oneback.apk` from the releases and open it on the phone (e.g. from `~/Downloads` in the file manager).
-2. Open **OneBack** from the app grid. It only opens Android's accessibility settings. Switch on **"OneBack floating back button"** there.
+2. Open **OneBack** from the app grid and tap **Turn on in accessibility settings**. Switch on **"OneBack floating back button"** there.
 3. Check that the button works.
+
+## Settings
+
+The OneBack app shows whether the button is on, switches between tap mode and swipe mode, and has a blank test page to leave with the button. It also lets you set the button's size, opacity and how long a long press hides it. Changes apply to the button right away. It can also move the button back to its default position.
 
 ## Hide the Android navigation bar
 
@@ -49,7 +54,7 @@ grep mainkeys /tmp/appsupport/defaultuser/generated_props
 ## Undo
 
 - **Bar:** delete `/etc/appsupport.conf.d/90-hide-navbar.conf` (as root) and Stop/Start AppSupport.
-- **OneBack:** switch it off in the accessibility settings (open OneBack from the app grid), or uninstall it in Settings → Apps.
+- **OneBack:** switch it off in the accessibility settings (OneBack app → Accessibility settings), or uninstall it in Settings → Apps.
 
 While the bar is hidden, don't switch OneBack off, or you'll only have the apps' own back arrows.
 

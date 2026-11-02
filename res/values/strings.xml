@@ -2,5 +2,31 @@
 <resources>
     <string name="app_name">OneBack</string>
     <string name="service_name">OneBack floating back button</string>
-    <string name="service_description">Shows a floating button. Tap: Back. Drag: move it. Long press: hide it for 10 seconds. Cannot read screen content.</string>
+    <string name="service_description">Shows a floating button. Tap: Back. Drag: move it. Long press: hide it for a few seconds. Swipe mode and other settings are in the OneBack app. Cannot read screen content.</string>
+
+    <string name="status_on">The button is on.</string>
+    <string name="status_off">The button is off. Switch on \"OneBack floating back button\" in the accessibility settings.</string>
+    <string name="open_settings_on">Turn on in accessibility settings</string>
+    <string name="open_settings_off">Accessibility settings</string>
+
+    <string name="heading_button">Button</string>
+    <string name="label_size">Size</string>
+    <string name="label_opacity">Opacity</string>
+    <string name="label_hide">Long press hides it for</string>
+    <string name="unit_dp">%d dp</string>
+    <string name="unit_percent">%d %%</string>
+    <string name="unit_seconds">%d s</string>
+    <string name="hint_live">Changes apply to the button right away.</string>
+    <string name="reset_position">Move button back to default position</string>
+    <string name="reset_defaults">Restore default settings</string>
+
+    <string name="open_test">Open test page</string>
+    <string name="test_title">Test page</string>
+    <string name="test_text">Use the OneBack button to go back to the settings.\n\nIf that doesn\'t work, tap the arrow at the top left.</string>
+    <string name="test_close">Back to settings</string>
+
+    <string name="heading_gestures">Gestures</string>
+    <string name="label_swipe">Swipe mode</string>
+    <string name="help_tap">Tap: Back. Drag: move it. Long press: hide it. Hidden in landscape.</string>
+    <string name="help_swipe">Swipe starting on the button (any direction): Back. Tap: nothing. Long press, then drag: move it. Long press and release: hide it. Hidden in landscape.</string>
 </resources>

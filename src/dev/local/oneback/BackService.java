@@ -20,17 +20,16 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 
 /**
- * Floating Back button.
- *   tap        -> global Back
- *   drag       -> move (position is remembered)
- *   long press -> hide for HIDE_MS
- *   landscape  -> hidden
+ * Floating Back button. Two gesture modes (Prefs.SWIPE):
+ *   tap mode:   tap -> Back, drag -> move, long press -> hide for a few seconds
+ *   swipe mode: swipe starting on the button (any direction) -> Back, tap -> nothing,
+ *               long press then drag -> move, long press and release -> hide
+ * Position is remembered; landscape -> hidden.
+ * Size, opacity and hide time come from {@link Prefs} and are applied live when the
+ * settings screen changes them.
  * Uses TYPE_ACCESSIBILITY_OVERLAY, so no "display over other apps" permission is needed.
  */
 public class BackService extends AccessibilityService {
-    private static final int SIZE_DP = 44;
-    private static final long HIDE_MS = 10_000;
-
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
@@ -39,35 +38,45 @@ public class BackService extends AccessibilityService {
 
     private float downRawX, downRawY;
     private int startX, startY;
-    private boolean dragging, longPressed;
+    private boolean pressed, dragging, swiping, longPressed;
+    private boolean swipeMode; // mode of the current touch, read on ACTION_DOWN
     private boolean hiddenByLongPress;
+    private float idleAlpha;
 
+    /** Held in a field: SharedPreferences keeps listeners only weakly. */
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
+            (p, key) -> applySettings();
+
+    /** Tap mode: hide right away. Swipe mode: arm moving; release without moving hides. */
     private final Runnable longPress = () -> {
         longPressed = true;
         button.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        if (!swipeMode) hide();
+    };
+
+    private void hide() {
         hiddenByLongPress = true;
         updateVisibility();
-        handler.postDelayed(this::show, HIDE_MS);
-    };
+        handler.removeCallbacks(showAgain);
+        handler.postDelayed(showAgain, Prefs.hideMs(prefs));
+    }
+
+    private final Runnable showAgain = this::show;
 
     @Override
     protected void onServiceConnected() {
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-        prefs = getSharedPreferences("pos", MODE_PRIVATE);
-        DisplayMetrics dm = getResources().getDisplayMetrics();
-        int size = Math.round(SIZE_DP * dm.density);
+        prefs = Prefs.get(this);
 
         button = new ArrowView(this);
         lp = new WindowManager.LayoutParams(
-                size, size,
+                0, 0,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.START;
-        lp.x = prefs.getInt("x", dm.widthPixels - size - Math.round(8 * dm.density));
-        lp.y = prefs.getInt("y", Math.round(dm.heightPixels * 0.75f));
-        clamp();
+        applySettings();
 
         final int slop = ViewConfiguration.get(this).getScaledTouchSlop();
         final long longMs = ViewConfiguration.getLongPressTimeout();
@@ -80,15 +89,26 @@ public class BackService extends AccessibilityService {
                     startX = lp.x;
                     startY = lp.y;
                     dragging = false;
+                    swiping = false;
                     longPressed = false;
+                    pressed = true;
+                    swipeMode = prefs.getBoolean(Prefs.SWIPE, false);
                     v.setAlpha(1f);
                     handler.postDelayed(longPress, longMs);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dx = e.getRawX() - downRawX, dy = e.getRawY() - downRawY;
-                    if (!dragging && !longPressed && Math.hypot(dx, dy) > slop) {
-                        dragging = true;
-                        handler.removeCallbacks(longPress);
+                    boolean moved = Math.hypot(dx, dy) > slop;
+                    if (!dragging && !swiping && moved) {
+                        if (!swipeMode && !longPressed) {
+                            dragging = true;               // tap mode: plain drag moves
+                            handler.removeCallbacks(longPress);
+                        } else if (swipeMode && longPressed) {
+                            dragging = true;               // swipe mode: drag after long press moves
+                        } else if (swipeMode) {
+                            swiping = true;                // swipe mode: early movement is a swipe
+                            handler.removeCallbacks(longPress);
+                        }
                     }
                     if (dragging) {
                         lp.x = startX + Math.round(dx);
@@ -100,25 +120,43 @@ public class BackService extends AccessibilityService {
                 }
                 case MotionEvent.ACTION_UP:
                     handler.removeCallbacks(longPress);
-                    v.setAlpha(0.6f);
+                    pressed = false;
+                    v.setAlpha(idleAlpha);
                     if (dragging) {
-                        prefs.edit().putInt("x", lp.x).putInt("y", lp.y).apply();
-                    } else if (!longPressed) {
+                        prefs.edit().putInt(Prefs.X, lp.x).putInt(Prefs.Y, lp.y).apply();
+                    } else if (swipeMode ? swiping : !longPressed) {
                         v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                         performGlobalAction(GLOBAL_ACTION_BACK);
+                    } else if (swipeMode && longPressed) {
+                        hide();
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     handler.removeCallbacks(longPress);
-                    v.setAlpha(0.6f);
+                    pressed = false;
+                    v.setAlpha(idleAlpha);
                     return true;
             }
             return false;
         });
 
-        button.setAlpha(0.6f);
         updateVisibility();
         wm.addView(button, lp);
+        prefs.registerOnSharedPreferenceChangeListener(prefListener);
+    }
+
+    /** Reads size, opacity and position from prefs. A removed position means the default spot. */
+    private void applySettings() {
+        if (button == null) return;
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int size = Math.round(Prefs.sizeDp(prefs) * dm.density);
+        lp.width = lp.height = size;
+        lp.x = prefs.getInt(Prefs.X, dm.widthPixels - size - Math.round(8 * dm.density));
+        lp.y = prefs.getInt(Prefs.Y, Math.round(dm.heightPixels * 0.75f));
+        clamp();
+        idleAlpha = Prefs.alpha(prefs);
+        if (!pressed) button.setAlpha(idleAlpha);
+        if (button.isAttachedToWindow()) wm.updateViewLayout(button, lp);
     }
 
     private void show() {
@@ -160,6 +198,7 @@ public class BackService extends AccessibilityService {
     @Override
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(prefListener);
         if (button != null && button.isAttachedToWindow()) wm.removeView(button);
         button = null;
         super.onDestroy();
