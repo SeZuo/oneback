@@ -2,13 +2,15 @@
 
 A one-tap floating Back button for Android apps on **Sailfish OS (Android AppSupport)**. Together with one config line, it replaces the big bar at the bottom of every Android app that holds only a back button.
 
-| | Tap mode (default) | Swipe mode |
-|---|---|---|
-| Back | Tap | Swipe starting on the button (any direction) |
-| Move the button (position is remembered) | Drag | Long press, then drag |
-| Hide it for a few seconds (10 by default) | Long press | Long press and release |
+| | |
+|---|---|
+| Tap, or swipe starting on the button | Back |
+| Long press | The button grows and turns blue (moving is armed) |
+| … then drag | Move the button (position is remembered) |
+| … then release without dragging | Hide it for a few seconds (10 by default) |
+| Landscape | Hidden automatically |
 
-In swipe mode a plain tap does nothing. In landscape the button is hidden automatically.
+Tap and swipe are both on by default. Either one can be switched off in the settings, but not both. Swipes count in the directions you pick (default: left and right; the direction is the one the swipe mostly goes in).
 
 Tested on the Jolla Phone (2026), Sailfish OS 5.2.0.22, AppSupport (Android 15).
 
@@ -28,7 +30,7 @@ OneBack is an Android **accessibility service**, which is how it can send a syst
 
 ## Settings
 
-The OneBack app shows whether the button is on, switches between tap mode and swipe mode, and has a blank test page to leave with the button. It also lets you set the button's size, opacity and how long a long press hides it. Changes apply to the button right away. It can also move the button back to its default position.
+The OneBack app shows whether the button is on and has a blank test page to leave with the button. You can choose whether tap, swipe or both mean Back, and which swipe directions count. It also lets you set the button's size, opacity and how long a long press hides it. Changes apply to the button right away. It can also move the button back to its default position.
 
 ## Hide the Android navigation bar
 

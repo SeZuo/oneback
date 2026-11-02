@@ -20,26 +20,35 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 
 /**
- * Floating Back button. Two gesture modes (Prefs.SWIPE):
- *   tap mode:   tap -> Back, drag -> move, long press -> hide for a few seconds
- *   swipe mode: swipe starting on the button (any direction) -> Back, tap -> nothing,
- *               long press then drag -> move, long press and release -> hide
- * Position is remembered; landscape -> hidden.
+ * Floating Back button.
+ *   tap, or swipe starting on the button -> global Back (each can be switched off, Prefs.TAP/SWIPE;
+ *                                           swipe directions: Prefs.DIRS, default only horizontal)
+ *   long press                           -> button grows, turns blue, shows a move cross
+ *     ... then drag                      -> move (position is remembered)
+ *     ... then release without dragging  -> hide for a few seconds
+ *   landscape                            -> hidden
  * Size, opacity and hide time come from {@link Prefs} and are applied live when the
  * settings screen changes them.
  * Uses TYPE_ACCESSIBILITY_OVERLAY, so no "display over other apps" permission is needed.
  */
 public class BackService extends AccessibilityService {
+    /** Size of the button while armed for moving, so it shows around the thumb. */
+    private static final float ARMED_SCALE = 1.6f;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
-    private View button;
+    private ArrowView button;
     private SharedPreferences prefs;
+
+    /** Top-left corner and size of the button at normal size; lp is derived from these. */
+    private int posX, posY, size;
 
     private float downRawX, downRawY;
     private int startX, startY;
-    private boolean pressed, dragging, swiping, longPressed;
-    private boolean swipeMode; // mode of the current touch, read on ACTION_DOWN
+    private boolean pressed, moved, armed, dragging;
+    private boolean tapBack, swipeBack; // read on ACTION_DOWN
+    private final boolean[] dirBack = new boolean[4]; // left, right, up, down (order of Prefs.DIRS)
     private boolean hiddenByLongPress;
     private float idleAlpha;
 
@@ -47,19 +56,13 @@ public class BackService extends AccessibilityService {
     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener =
             (p, key) -> applySettings();
 
-    /** Tap mode: hide right away. Swipe mode: arm moving; release without moving hides. */
+    /** Long press: arm for moving and make that visible around the thumb. */
     private final Runnable longPress = () -> {
-        longPressed = true;
+        armed = true;
         button.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-        if (!swipeMode) hide();
+        button.setArmed(true);
+        layout();
     };
-
-    private void hide() {
-        hiddenByLongPress = true;
-        updateVisibility();
-        handler.removeCallbacks(showAgain);
-        handler.postDelayed(showAgain, Prefs.hideMs(prefs));
-    }
 
     private final Runnable showAgain = this::show;
 
@@ -86,55 +89,48 @@ public class BackService extends AccessibilityService {
                 case MotionEvent.ACTION_DOWN:
                     downRawX = e.getRawX();
                     downRawY = e.getRawY();
-                    startX = lp.x;
-                    startY = lp.y;
-                    dragging = false;
-                    swiping = false;
-                    longPressed = false;
+                    startX = posX;
+                    startY = posY;
                     pressed = true;
-                    swipeMode = prefs.getBoolean(Prefs.SWIPE, false);
+                    moved = armed = dragging = false;
+                    tapBack = Prefs.tap(prefs);
+                    swipeBack = Prefs.swipe(prefs);
+                    for (int i = 0; i < 4; i++) dirBack[i] = Prefs.dir(prefs, Prefs.DIRS[i]);
                     v.setAlpha(1f);
                     handler.postDelayed(longPress, longMs);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dx = e.getRawX() - downRawX, dy = e.getRawY() - downRawY;
-                    boolean moved = Math.hypot(dx, dy) > slop;
-                    if (!dragging && !swiping && moved) {
-                        if (!swipeMode && !longPressed) {
-                            dragging = true;               // tap mode: plain drag moves
-                            handler.removeCallbacks(longPress);
-                        } else if (swipeMode && longPressed) {
-                            dragging = true;               // swipe mode: drag after long press moves
-                        } else if (swipeMode) {
-                            swiping = true;                // swipe mode: early movement is a swipe
+                    if (Math.hypot(dx, dy) > slop) {
+                        if (armed) dragging = true;      // after long press: move
+                        else if (!moved) {               // before: it's a swipe
+                            moved = true;
                             handler.removeCallbacks(longPress);
                         }
                     }
                     if (dragging) {
-                        lp.x = startX + Math.round(dx);
-                        lp.y = startY + Math.round(dy);
+                        posX = startX + Math.round(dx);
+                        posY = startY + Math.round(dy);
                         clamp();
-                        wm.updateViewLayout(button, lp);
+                        layout();
                     }
                     return true;
                 }
                 case MotionEvent.ACTION_UP:
                     handler.removeCallbacks(longPress);
-                    pressed = false;
-                    v.setAlpha(idleAlpha);
                     if (dragging) {
-                        prefs.edit().putInt(Prefs.X, lp.x).putInt(Prefs.Y, lp.y).apply();
-                    } else if (swipeMode ? swiping : !longPressed) {
+                        prefs.edit().putInt(Prefs.X, posX).putInt(Prefs.Y, posY).apply();
+                    } else if (armed) {
+                        hide();
+                    } else if (moved ? swipeBack && swipeDirOk(e) : tapBack) { // if enabled
                         v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                         performGlobalAction(GLOBAL_ACTION_BACK);
-                    } else if (swipeMode && longPressed) {
-                        hide();
                     }
+                    release();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     handler.removeCallbacks(longPress);
-                    pressed = false;
-                    v.setAlpha(idleAlpha);
+                    release();
                     return true;
             }
             return false;
@@ -145,23 +141,54 @@ public class BackService extends AccessibilityService {
         prefs.registerOnSharedPreferenceChangeListener(prefListener);
     }
 
-    /** Reads size, opacity and position from prefs. A removed position means the default spot. */
-    private void applySettings() {
-        if (button == null) return;
-        DisplayMetrics dm = getResources().getDisplayMetrics();
-        int size = Math.round(Prefs.sizeDp(prefs) * dm.density);
-        lp.width = lp.height = size;
-        lp.x = prefs.getInt(Prefs.X, dm.widthPixels - size - Math.round(8 * dm.density));
-        lp.y = prefs.getInt(Prefs.Y, Math.round(dm.heightPixels * 0.75f));
-        clamp();
-        idleAlpha = Prefs.alpha(prefs);
-        if (!pressed) button.setAlpha(idleAlpha);
-        if (button.isAttachedToWindow()) wm.updateViewLayout(button, lp);
+    /** Direction of the swipe by its dominant axis, checked against the enabled directions. */
+    private boolean swipeDirOk(MotionEvent e) {
+        float dx = e.getRawX() - downRawX, dy = e.getRawY() - downRawY;
+        int dir = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 0 : 1) : (dy < 0 ? 2 : 3);
+        return dirBack[dir];
+    }
+
+    /** End of a touch: back to normal size, colour and opacity. */
+    private void release() {
+        pressed = false;
+        armed = dragging = false;
+        button.setArmed(false);
+        button.setAlpha(idleAlpha);
+        layout();
+    }
+
+    private void hide() {
+        hiddenByLongPress = true;
+        updateVisibility();
+        handler.removeCallbacks(showAgain);
+        handler.postDelayed(showAgain, Prefs.hideMs(prefs));
     }
 
     private void show() {
         hiddenByLongPress = false;
         updateVisibility();
+    }
+
+    /** Reads size, opacity and position from prefs. A removed position means the default spot. */
+    private void applySettings() {
+        if (button == null) return;
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        size = Math.round(Prefs.sizeDp(prefs) * dm.density);
+        posX = prefs.getInt(Prefs.X, dm.widthPixels - size - Math.round(8 * dm.density));
+        posY = prefs.getInt(Prefs.Y, Math.round(dm.heightPixels * 0.75f));
+        clamp();
+        idleAlpha = Prefs.alpha(prefs);
+        if (!pressed) button.setAlpha(idleAlpha);
+        layout();
+    }
+
+    /** Window from posX/posY/size; while armed it is larger, around the same centre. */
+    private void layout() {
+        int s = armed ? Math.round(size * ARMED_SCALE) : size;
+        lp.width = lp.height = s;
+        lp.x = posX - (s - size) / 2;
+        lp.y = posY - (s - size) / 2;
+        if (button.isAttachedToWindow()) wm.updateViewLayout(button, lp);
     }
 
     /** Visible only in portrait, and not while hidden by a long press. */
@@ -172,20 +199,20 @@ public class BackService extends AccessibilityService {
         button.setVisibility(landscape || hiddenByLongPress ? View.GONE : View.VISIBLE);
     }
 
-    /** Keep the button fully on screen (also after rotation). */
+    /** Keep the button (at normal size) fully on screen, also after rotation. */
     private void clamp() {
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        lp.x = Math.max(0, Math.min(lp.x, dm.widthPixels - lp.width));
-        lp.y = Math.max(0, Math.min(lp.y, dm.heightPixels - lp.height));
+        posX = Math.max(0, Math.min(posX, dm.widthPixels - size));
+        posY = Math.max(0, Math.min(posY, dm.heightPixels - size));
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        if (button != null && button.isAttachedToWindow()) {
+        if (button != null) {
             updateVisibility();
             clamp();
-            wm.updateViewLayout(button, lp);
+            layout();
         }
     }
 
@@ -204,30 +231,52 @@ public class BackService extends AccessibilityService {
         super.onDestroy();
     }
 
-    /** Dark circle with a white "<" chevron. */
+    /** Dark circle with a white "<" chevron; armed: blue circle with a four-way move cross. */
     private static class ArrowView extends View {
+        private static final int NORMAL = 0xFF303030, ARMED = 0xFF1E88E5;
         private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path path = new Path();
+        private boolean armed;
 
         ArrowView(Context c) {
             super(c);
-            fill.setColor(0xFF303030);
+            fill.setColor(NORMAL);
             stroke.setColor(0xFFFFFFFF);
             stroke.setStyle(Paint.Style.STROKE);
             stroke.setStrokeCap(Paint.Cap.ROUND);
             stroke.setStrokeJoin(Paint.Join.ROUND);
         }
 
+        void setArmed(boolean a) {
+            if (armed == a) return;
+            armed = a;
+            fill.setColor(a ? ARMED : NORMAL);
+            invalidate();
+        }
+
         @Override
         protected void onDraw(Canvas c) {
             float w = getWidth(), h = getHeight(), r = Math.min(w, h) / 2f;
-            c.drawCircle(w / 2f, h / 2f, r, fill);
-            stroke.setStrokeWidth(r * 0.18f);
+            float cx = w / 2f, cy = h / 2f;
+            c.drawCircle(cx, cy, r, fill);
             path.reset();
-            path.moveTo(w / 2f + r * 0.15f, h / 2f - r * 0.42f);
-            path.lineTo(w / 2f - r * 0.27f, h / 2f);
-            path.lineTo(w / 2f + r * 0.15f, h / 2f + r * 0.42f);
+            if (armed) {
+                stroke.setStrokeWidth(r * 0.1f);
+                float a = r * 0.55f, head = r * 0.15f;
+                path.moveTo(cx - a, cy); path.lineTo(cx + a, cy);
+                path.moveTo(cx, cy - a); path.lineTo(cx, cy + a);
+                // arrow heads: left, right, up, down
+                path.moveTo(cx - a + head, cy - head); path.lineTo(cx - a, cy); path.lineTo(cx - a + head, cy + head);
+                path.moveTo(cx + a - head, cy - head); path.lineTo(cx + a, cy); path.lineTo(cx + a - head, cy + head);
+                path.moveTo(cx - head, cy - a + head); path.lineTo(cx, cy - a); path.lineTo(cx + head, cy - a + head);
+                path.moveTo(cx - head, cy + a - head); path.lineTo(cx, cy + a); path.lineTo(cx + head, cy + a - head);
+            } else {
+                stroke.setStrokeWidth(r * 0.18f);
+                path.moveTo(cx + r * 0.15f, cy - r * 0.42f);
+                path.lineTo(cx - r * 0.27f, cy);
+                path.lineTo(cx + r * 0.15f, cy + r * 0.42f);
+            }
             c.drawPath(path, stroke);
         }
     }

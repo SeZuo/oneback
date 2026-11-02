@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">OneBack</string>
     <string name="service_name">OneBack floating back button</string>
-    <string name="service_description">Shows a floating button. Tap: Back. Drag: move it. Long press: hide it for a few seconds. Swipe mode and other settings are in the OneBack app. Cannot read screen content.</string>
+    <string name="service_description">Shows a floating button. Tap or swipe: Back. Long press, then drag: move it. Long press and release: hide it. Settings are in the OneBack app. Cannot read screen content.</string>
 
     <string name="status_on">The button is on.</string>
     <string name="status_off">The button is off. Switch on \"OneBack floating back button\" in the accessibility settings.</string>
@@ -26,7 +26,21 @@
     <string name="test_close">Back to settings</string>
 
     <string name="heading_gestures">Gestures</string>
-    <string name="label_swipe">Swipe mode</string>
-    <string name="help_tap">Tap: Back. Drag: move it. Long press: hide it. Hidden in landscape.</string>
-    <string name="help_swipe">Swipe starting on the button (any direction): Back. Tap: nothing. Long press, then drag: move it. Long press and release: hide it. Hidden in landscape.</string>
+    <string name="label_tap">Tap: Back</string>
+    <string name="label_swipe">Swipe starting on the button: Back</string>
+    <string name="dir_left">←</string>
+    <string name="dir_right">→</string>
+    <string name="dir_up">↑</string>
+    <string name="dir_down">↓</string>
+    <string name="dir_description">Swipe %s: Back</string>
+    <string name="help_at_least_one">At least one of tap and swipe stays on, and at least one direction.</string>
+    <string name="heading_more_gestures">Moving and hiding</string>
+    <string name="g_long">Long press</string>
+    <string name="g_long_does">The button turns blue and grows</string>
+    <string name="g_drag">… then drag</string>
+    <string name="g_drag_does">Move it</string>
+    <string name="g_release">… then let go</string>
+    <string name="g_release_does">Hide it for the time set below</string>
+    <string name="g_landscape">Landscape</string>
+    <string name="g_landscape_does">Hidden automatically</string>
 </resources>

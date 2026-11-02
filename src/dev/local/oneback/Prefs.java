@@ -10,8 +10,11 @@ final class Prefs {
 
     static final String X = "x", Y = "y";
     static final String SIZE = "size_dp", ALPHA = "alpha_pct", HIDE = "hide_s";
-    /** false: tap = Back, drag = move. true: swipe = Back, long press + drag = move. */
-    static final String SWIPE = "swipe_mode";
+    /** Which gestures mean Back. Both default on; the settings screen keeps at least one on. */
+    static final String TAP = "tap_back", SWIPE = "swipe_back";
+    /** Swipe directions that mean Back. Default: only horizontal. At least one stays on. */
+    static final String LEFT = "swipe_left", RIGHT = "swipe_right", UP = "swipe_up", DOWN = "swipe_down";
+    static final String[] DIRS = { LEFT, RIGHT, UP, DOWN };
 
     static final int SIZE_DEF = 44, SIZE_MIN = 28, SIZE_MAX = 80, SIZE_STEP = 2;
     static final int ALPHA_DEF = 60, ALPHA_MIN = 20, ALPHA_MAX = 100, ALPHA_STEP = 5;
@@ -25,6 +28,11 @@ final class Prefs {
 
     static int sizeDp(SharedPreferences p) { return clamp(p.getInt(SIZE, SIZE_DEF), SIZE_MIN, SIZE_MAX); }
     static float alpha(SharedPreferences p) { return clamp(p.getInt(ALPHA, ALPHA_DEF), ALPHA_MIN, ALPHA_MAX) / 100f; }
+    static boolean tap(SharedPreferences p) { return p.getBoolean(TAP, true); }
+    static boolean swipe(SharedPreferences p) { return p.getBoolean(SWIPE, true); }
+    static boolean dir(SharedPreferences p, String key) {
+        return p.getBoolean(key, key.equals(LEFT) || key.equals(RIGHT));
+    }
     static long hideMs(SharedPreferences p) { return clamp(p.getInt(HIDE, HIDE_DEF), HIDE_MIN, HIDE_MAX) * 1000L; }
 
     static int clamp(int v, int min, int max) { return Math.max(min, Math.min(v, max)); }

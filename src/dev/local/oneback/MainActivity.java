@@ -16,8 +16,11 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
+import android.graphics.drawable.StateListDrawable;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -26,12 +29,15 @@ import android.widget.TextView;
 
 /**
  * Settings screen: service status (with a shortcut to Android's accessibility settings),
- * a test page, gesture mode, button size, opacity, hide time, and resetting the position. Values are written to
+ * a test page, gesture help, button size, opacity, hide time, and resetting the position. Values are written to
  * {@link Prefs} and the running service picks them up immediately.
  */
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private TextView status;
+    private Switch tapSwitch, swipeSwitch;
+    private final CheckBox[] dirBoxes = new CheckBox[4]; // order of Prefs.DIRS
+    private View dirCentre;
     private Button toggle;
     private ObjectAnimator pulse;
     private static final String TAG = "OneBack";
@@ -91,21 +97,23 @@ public class MainActivity extends Activity {
         col.addView(test);
 
         col.addView(heading(R.string.heading_gestures));
-        Switch swipe = new Switch(this);
-        swipe.setText(R.string.label_swipe);
-        swipe.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        swipe.setPadding(0, dp(12), 0, dp(4));
-        TextView modeHelp = text("", 14);
-        modeHelp.setAlpha(0.7f);
-        boolean swipeOn = prefs.getBoolean(Prefs.SWIPE, false);
-        swipe.setChecked(swipeOn);
-        modeHelp.setText(swipeOn ? R.string.help_swipe : R.string.help_tap);
-        swipe.setOnCheckedChangeListener((b, on) -> {
-            prefs.edit().putBoolean(Prefs.SWIPE, on).apply();
-            modeHelp.setText(on ? R.string.help_swipe : R.string.help_tap);
-        });
-        col.addView(swipe);
-        col.addView(modeHelp);
+        tapSwitch = gestureSwitch(col, R.string.label_tap, Prefs.TAP, Prefs.tap(prefs));
+        swipeSwitch = gestureSwitch(col, R.string.label_swipe, Prefs.SWIPE, Prefs.swipe(prefs));
+        col.addView(directionCross());
+        lockLastGesture();
+        TextView rule = text(getString(R.string.help_at_least_one), 14);
+        rule.setAlpha(0.7f);
+        rule.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.addView(rule);
+
+        TextView more = text(getString(R.string.heading_more_gestures), 14);
+        more.setTypeface(Typeface.DEFAULT_BOLD);
+        more.setPadding(0, dp(16), 0, dp(4));
+        col.addView(more);
+        gestureRow(col, R.string.g_long, R.string.g_long_does);
+        gestureRow(col, R.string.g_drag, R.string.g_drag_does);
+        gestureRow(col, R.string.g_release, R.string.g_release_does);
+        gestureRow(col, R.string.g_landscape, R.string.g_landscape_does);
 
         col.addView(heading(R.string.heading_button));
         addSlider(col, R.string.label_size, R.string.unit_dp, Prefs.SIZE,
@@ -129,8 +137,10 @@ public class MainActivity extends Activity {
         Button defaults = new Button(this);
         defaults.setText(R.string.reset_defaults);
         defaults.setOnClickListener(v -> {
-            prefs.edit().remove(Prefs.SIZE).remove(Prefs.ALPHA).remove(Prefs.HIDE)
-                    .remove(Prefs.SWIPE).apply();
+            SharedPreferences.Editor ed = prefs.edit().remove(Prefs.SIZE).remove(Prefs.ALPHA)
+                    .remove(Prefs.HIDE).remove(Prefs.TAP).remove(Prefs.SWIPE);
+            for (String d : Prefs.DIRS) ed.remove(d);
+            ed.apply();
             recreate();
         });
         col.addView(defaults);
@@ -202,6 +212,124 @@ public class MainActivity extends Activity {
             if (me.equals(ComponentName.unflattenFromString(s))) return true;
         }
         return false;
+    }
+
+    private Switch gestureSwitch(LinearLayout col, int labelRes, String key, boolean on) {
+        Switch sw = new Switch(this);
+        sw.setText(labelRes);
+        sw.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        sw.setPadding(0, dp(12), 0, dp(4));
+        sw.setChecked(on);
+        sw.setOnCheckedChangeListener((b, checked) -> {
+            prefs.edit().putBoolean(key, checked).apply();
+            lockLastGesture();
+        });
+        col.addView(sw);
+        return sw;
+    }
+
+    /**
+     * At least one of tap/swipe must stay on, and at least one swipe direction: the last one
+     * still on can't be switched off. Directions are greyed out while swipe is off.
+     */
+    private void lockLastGesture() {
+        if (tapSwitch == null || swipeSwitch == null || dirBoxes[3] == null) return;
+        tapSwitch.setEnabled(!(tapSwitch.isChecked() && !swipeSwitch.isChecked()));
+        swipeSwitch.setEnabled(!(swipeSwitch.isChecked() && !tapSwitch.isChecked()));
+        int dirsOn = 0;
+        for (CheckBox b : dirBoxes) if (b.isChecked()) dirsOn++;
+        for (CheckBox b : dirBoxes) {
+            b.setEnabled(swipeSwitch.isChecked() && !(b.isChecked() && dirsOn == 1));
+            b.setAlpha(swipeSwitch.isChecked() ? 1f : 0.35f);
+        }
+        dirCentre.setAlpha(swipeSwitch.isChecked() ? 1f : 0.35f);
+    }
+
+    /**
+     * Swipe directions as a cross around a dot (the button): up on top, left/right beside,
+     * down below. Each arrow is a CheckBox drawn as a tile: blue when on, outlined when off.
+     */
+    private View directionCross() {
+        final int cell = dp(52), gap = dp(4);
+        // grid position (row, column) of each direction, in Prefs.DIRS order: left, right, up, down
+        final int[][] pos = { {1, 0}, {1, 2}, {0, 1}, {2, 1} };
+        final int[] labels = { R.string.dir_left, R.string.dir_right, R.string.dir_up, R.string.dir_down };
+        View[][] grid = new View[3][3];
+
+        for (int i = 0; i < 4; i++) {
+            String key = Prefs.DIRS[i];
+            CheckBox box = new CheckBox(this);
+            box.setButtonDrawable(null);
+            box.setText(labels[i]);
+            box.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+            box.setGravity(Gravity.CENTER);
+            box.setPadding(0, 0, 0, 0);
+            box.setBackground(tileBackground());
+            box.setTextColor(new ColorStateList(
+                    new int[][] { { android.R.attr.state_checked }, { } },
+                    new int[] { 0xFFFFFFFF, box.getTextColors().getDefaultColor() }));
+            box.setContentDescription(getString(R.string.dir_description, getString(labels[i])));
+            box.setChecked(Prefs.dir(prefs, key));
+            box.setOnCheckedChangeListener((b, checked) -> {
+                prefs.edit().putBoolean(key, checked).apply();
+                lockLastGesture();
+            });
+            dirBoxes[i] = box;
+            grid[pos[i][0]][pos[i][1]] = box;
+        }
+
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
+        dot.setColor(0xFF303030);
+        dirCentre = new View(this);
+        dirCentre.setBackground(dot);
+        grid[1][1] = dirCentre;
+
+        LinearLayout cross = new LinearLayout(this);
+        cross.setOrientation(LinearLayout.VERTICAL);
+        cross.setGravity(Gravity.CENTER_HORIZONTAL);
+        cross.setPadding(0, dp(8), 0, dp(8));
+        for (View[] row : grid) {
+            LinearLayout r = new LinearLayout(this);
+            for (View v : row) {
+                if (v == null) v = new View(this); // empty corner
+                int s = v == dirCentre ? cell / 2 : cell;
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(s, s);
+                int m = gap + (cell - s) / 2;
+                lp.setMargins(m, m, m, m);
+                r.addView(v, lp);
+            }
+            cross.addView(r);
+        }
+        return cross;
+    }
+
+    /** One line of the gesture table: gesture in bold on the left, what it does on the right. */
+    private void gestureRow(LinearLayout col, int gestureRes, int effectRes) {
+        LinearLayout row = new LinearLayout(this);
+        row.setPadding(0, dp(4), 0, dp(4));
+        TextView g = text(getString(gestureRes), 14);
+        g.setTypeface(Typeface.DEFAULT_BOLD);
+        row.addView(g, new LinearLayout.LayoutParams(dp(120), LinearLayout.LayoutParams.WRAP_CONTENT));
+        TextView e = text(getString(effectRes), 14);
+        e.setAlpha(0.8f);
+        row.addView(e, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        col.addView(row);
+    }
+
+    /** Blue rounded tile when checked, outlined when not. */
+    private Drawable tileBackground() {
+        GradientDrawable on = new GradientDrawable();
+        on.setColor(0xFF1E88E5);
+        on.setCornerRadius(dp(10));
+        GradientDrawable off = new GradientDrawable();
+        off.setColor(0x00000000);
+        off.setStroke(dp(2), 0x80888888);
+        off.setCornerRadius(dp(10));
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[] { android.R.attr.state_checked }, on);
+        states.addState(new int[] { }, off);
+        return states;
     }
 
     private void addSlider(LinearLayout col, int labelRes, int unitRes, String key,
