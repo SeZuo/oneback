@@ -1,0 +1,6 @@
+[Unit]
+Description=OneBack: hide the Android navigation bar if OneBack is on for %i (applies after AppSupport restart)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/oneback/navbar hide %i

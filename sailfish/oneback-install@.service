@@ -1,0 +1,8 @@
+[Unit]
+Description=OneBack: install the bundled APK into AppSupport for %i
+After=appsupport@%i.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/oneback/install %i
+TimeoutStartSec=180

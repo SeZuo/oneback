@@ -4,3 +4,6 @@ build/
 # Signing key: never publish
 *.keystore
 *.jks
+
+# Sailfish package build output
+sailfish/build/

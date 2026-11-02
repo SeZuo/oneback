@@ -1,0 +1,6 @@
+[Unit]
+Description=OneBack: show the Android navigation bar again (applies after AppSupport restart)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/oneback/navbar show

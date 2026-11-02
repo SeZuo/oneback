@@ -1,0 +1,6 @@
+[Unit]
+Description=OneBack: check whether OneBack is on in the accessibility settings of %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/oneback/check %i
