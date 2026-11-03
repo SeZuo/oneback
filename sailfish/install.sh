@@ -56,9 +56,13 @@ uid=$(id -u "$u" 2>/dev/null) || { echo "no such user: $u" >&2; exit 2; }
 export XDG_RUNTIME_DIR=/run/user/$uid
 export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/dbus/user_bus_socket
 
-# Already this version: don't reinstall (that would restart OneBack for no reason), but
-# still repair a crashed service, e.g. after the user uninstalled and reinstalled it.
-if appsupport-pm -i "$u" listFull 2>/dev/null | grep -q "^dev\.local\.oneback;.*;$VERSION;"; then
+# Already this APK: don't reinstall (that would restart OneBack for no reason), but still
+# repair a crashed service, e.g. after the user uninstalled and reinstalled it. Android only
+# reports the version name, so the checksum of the last APK installed from here tells test
+# builds with the same name apart; package-only updates (same APK) still skip.
+SUM=$(sha256sum "$APK" | cut -d' ' -f1)
+if appsupport-pm -i "$u" listFull 2>/dev/null | grep -q "^dev\.local\.oneback;.*;$VERSION;" &&
+        [ "$(cat "$STATE/apk-$u" 2>/dev/null)" = "$SUM" ]; then
     rm -f "$STATE/pending-$u"
     repair_a11y "$u"
     exit 0
@@ -75,6 +79,7 @@ i=0
 while [ $i -lt 12 ]; do
     if appsupport-pm -i "$u" install "$APK"; then
         rm -f "$STATE/pending-$u"
+        mkdir -p "$STATE" && echo "$SUM" > "$STATE/apk-$u"
         if [ $fresh = yes ]; then
             gdbus call --session --dest com.jolla.apkd --object-path /com/jolla/apkd \
                 --method com.jolla.apkd.setAppStartOnBootup dev.local.oneback true >/dev/null 2>&1 || :

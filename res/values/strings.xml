@@ -10,7 +10,26 @@
     <string name="open_settings_off">Accessibility settings</string>
 
     <string name="heading_button">Button</string>
+    <string name="heading_style">Button style</string>
+    <string name="label_style">Style: %1$s</string>
+    <string name="styles_floating">Floating (move it anywhere)</string>
+    <string name="styles_edge">At the edge (sticks to the left or right side)</string>
+    <string-array name="style_names">
+        <item>Classic</item>
+        <item>Glow dot</item>
+        <item>Thin ring</item>
+        <item>Edge glow</item>
+        <item>Dotted chevron</item>
+        <item>Glowing chevron</item>
+        <item>Edge tab</item>
+        <item>Halftone edge</item>
+        <item>Halftone edge with arrow</item>
+        <item>Halftone disc</item>
+    </string-array>
     <string name="label_size">Size</string>
+    <string name="label_accent">Use system accent color</string>
+    <string name="help_accent">Colors the button with Android\'s accent color. On Sailfish OS (Jolla), this requires ambience-sync, which sets that color to the ambience: %1$s</string>
+    <string name="ambience_sync_url" translatable="false">github.com/babooo/ambience-sync</string>
     <string name="label_opacity">Opacity</string>
     <string name="label_hide">Long press hides it for</string>
     <string name="unit_dp">%d dp</string>

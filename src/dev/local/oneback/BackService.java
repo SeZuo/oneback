@@ -4,9 +4,6 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.Looper;
@@ -27,7 +24,7 @@ import android.view.accessibility.AccessibilityEvent;
  *     ... then drag                      -> move (position is remembered)
  *     ... then release without dragging  -> hide for a few seconds
  *   landscape                            -> hidden
- * Size, opacity and hide time come from {@link Prefs} and are applied live when the
+ * Size, opacity, hide time, style and colors come from {@link Prefs} and are applied live when the
  * settings screen changes them.
  * Uses TYPE_ACCESSIBILITY_OVERLAY, so no "display over other apps" permission is needed.
  */
@@ -38,7 +35,9 @@ public class BackService extends AccessibilityService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager wm;
     private WindowManager.LayoutParams lp;
-    private ArrowView button;
+    private ButtonView button;
+    /** Button style (Prefs.STYLE); edge styles snap to the left or right edge. */
+    private int style;
     private SharedPreferences prefs;
 
     /** Top-left corner and size of the button at normal size; lp is derived from these. */
@@ -73,7 +72,7 @@ public class BackService extends AccessibilityService {
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         prefs = Prefs.get(this);
 
-        button = new ArrowView(this);
+        button = new ButtonView(this);
         lp = new WindowManager.LayoutParams(
                 0, 0,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -152,7 +151,7 @@ public class BackService extends AccessibilityService {
         return dirBack[dir];
     }
 
-    /** End of a touch: back to normal size, colour and opacity. */
+    /** End of a touch: back to normal size, color and opacity. */
     private void release() {
         pressed = false;
         armed = dragging = false;
@@ -183,15 +182,40 @@ public class BackService extends AccessibilityService {
         posY = prefs.getInt(Prefs.Y, 0);
         idleAlpha = Prefs.alpha(prefs);
         if (!pressed) button.setAlpha(idleAlpha);
+        style = Prefs.style(prefs);
+        button.setStyle(style);
+        button.applyColors(this, prefs);
         layout();
     }
 
-    /** Window at the shown position; while armed it is larger, around the same centre. */
+    /** Window height: edge styles are taller than wide, so their glow fits. */
+    private int height() {
+        return ButtonView.isEdge(style) ? Math.round(size * ButtonView.EDGE_HEIGHT) : size;
+    }
+
+    /**
+     * Window at the shown position; while armed it is a larger circle around the same centre
+     * (for edge styles kept on screen, so the move cross isn't cut off at the edge).
+     */
     private void layout() {
-        int s = armed ? Math.round(size * ARMED_SCALE) : size;
-        lp.width = lp.height = s;
-        lp.x = shownX() - (s - size) / 2;
-        lp.y = shownY() - (s - size) / 2;
+        int x = shownX(), y = shownY(), h = height();
+        boolean edge = ButtonView.isEdge(style);
+        if (edge) button.setRightEdge(x > 0);
+        if (armed) {
+            int s = Math.round(size * ARMED_SCALE);
+            lp.width = lp.height = s;
+            lp.x = x + size / 2 - s / 2;
+            lp.y = y + h / 2 - s / 2;
+            if (edge) {
+                int sw = getResources().getDisplayMetrics().widthPixels;
+                lp.x = Math.max(0, Math.min(lp.x, sw - s));
+            }
+        } else {
+            lp.width = size;
+            lp.height = h;
+            lp.x = x;
+            lp.y = y;
+        }
         if (button.isAttachedToWindow()) wm.updateViewLayout(button, lp);
     }
 
@@ -210,23 +234,26 @@ public class BackService extends AccessibilityService {
      * e.g. in landscape (1032 high instead of 2272), so back in portrait it sat mid-screen.
      * Without a saved position the default spot (right edge, 3/4 down) is worked out from the
      * current screen each time, not once at start, so it's right after rotating too.
+     * Edge styles snap to the edge nearer to the button's centre (also while dragging).
      */
     private int shownX() {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         int x = hasPos ? posX : dm.widthPixels - size - Math.round(8 * dm.density);
+        if (ButtonView.isEdge(style)) return x + size / 2 < dm.widthPixels / 2 ? 0 : dm.widthPixels - size;
         return Math.max(0, Math.min(x, dm.widthPixels - size));
     }
 
     private int shownY() {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         int y = hasPos ? posY : Math.round(dm.heightPixels * 0.75f);
-        return Math.max(0, Math.min(y, dm.heightPixels - size));
+        return Math.max(0, Math.min(y, dm.heightPixels - height()));
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         if (button != null) {
+            button.applyColors(this, prefs);
             updateVisibility();
             layout();
         }
@@ -245,55 +272,5 @@ public class BackService extends AccessibilityService {
         if (button != null && button.isAttachedToWindow()) wm.removeView(button);
         button = null;
         super.onDestroy();
-    }
-
-    /** Dark circle with a white "<" chevron; armed: blue circle with a four-way move cross. */
-    private static class ArrowView extends View {
-        private static final int NORMAL = 0xFF303030, ARMED = 0xFF1E88E5;
-        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Path path = new Path();
-        private boolean armed;
-
-        ArrowView(Context c) {
-            super(c);
-            fill.setColor(NORMAL);
-            stroke.setColor(0xFFFFFFFF);
-            stroke.setStyle(Paint.Style.STROKE);
-            stroke.setStrokeCap(Paint.Cap.ROUND);
-            stroke.setStrokeJoin(Paint.Join.ROUND);
-        }
-
-        void setArmed(boolean a) {
-            if (armed == a) return;
-            armed = a;
-            fill.setColor(a ? ARMED : NORMAL);
-            invalidate();
-        }
-
-        @Override
-        protected void onDraw(Canvas c) {
-            float w = getWidth(), h = getHeight(), r = Math.min(w, h) / 2f;
-            float cx = w / 2f, cy = h / 2f;
-            c.drawCircle(cx, cy, r, fill);
-            path.reset();
-            if (armed) {
-                stroke.setStrokeWidth(r * 0.1f);
-                float a = r * 0.55f, head = r * 0.15f;
-                path.moveTo(cx - a, cy); path.lineTo(cx + a, cy);
-                path.moveTo(cx, cy - a); path.lineTo(cx, cy + a);
-                // arrow heads: left, right, up, down
-                path.moveTo(cx - a + head, cy - head); path.lineTo(cx - a, cy); path.lineTo(cx - a + head, cy + head);
-                path.moveTo(cx + a - head, cy - head); path.lineTo(cx + a, cy); path.lineTo(cx + a - head, cy + head);
-                path.moveTo(cx - head, cy - a + head); path.lineTo(cx, cy - a); path.lineTo(cx + head, cy - a + head);
-                path.moveTo(cx - head, cy + a - head); path.lineTo(cx, cy + a); path.lineTo(cx + head, cy + a - head);
-            } else {
-                stroke.setStrokeWidth(r * 0.18f);
-                path.moveTo(cx + r * 0.15f, cy - r * 0.42f);
-                path.lineTo(cx - r * 0.27f, cy);
-                path.lineTo(cx + r * 0.15f, cy + r * 0.42f);
-            }
-            c.drawPath(path, stroke);
-        }
     }
 }

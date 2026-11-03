@@ -15,6 +15,10 @@ final class Prefs {
     /** Swipe directions that mean Back. Default: only horizontal. At least one stays on. */
     static final String LEFT = "swipe_left", RIGHT = "swipe_right", UP = "swipe_up", DOWN = "swipe_down";
     static final String[] DIRS = { LEFT, RIGHT, UP, DOWN };
+    /** Color the button with Android's system accent (Android 12+). Default off. */
+    static final String ACCENT = "accent_color";
+    /** Button style, see ButtonView (0 = the original dark circle). */
+    static final String STYLE = "style";
 
     static final int SIZE_DEF = 44, SIZE_MIN = 28, SIZE_MAX = 80, SIZE_STEP = 2;
     static final int ALPHA_DEF = 60, ALPHA_MIN = 20, ALPHA_MAX = 100, ALPHA_STEP = 5;
@@ -33,6 +37,8 @@ final class Prefs {
     static boolean dir(SharedPreferences p, String key) {
         return p.getBoolean(key, key.equals(LEFT) || key.equals(RIGHT));
     }
+    static int style(SharedPreferences p) { return clamp(p.getInt(STYLE, 0), 0, ButtonView.COUNT - 1); }
+    static boolean accent(SharedPreferences p) { return p.getBoolean(ACCENT, false); }
     static long hideMs(SharedPreferences p) { return clamp(p.getInt(HIDE, HIDE_DEF), HIDE_MIN, HIDE_MAX) * 1000L; }
 
     static int clamp(int v, int min, int max) { return Math.max(min, Math.min(v, max)); }

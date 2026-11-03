@@ -5,12 +5,16 @@ A one-tap floating Back button for Android apps on **Sailfish OS (Android AppSup
 | | |
 |---|---|
 | Tap, or swipe starting on the button | Back |
-| Long press | The button grows and turns blue (moving is armed) |
+| Long press | The button grows and shows a move cross (moving is armed) |
 | … then drag | Move the button (position is remembered) |
 | … then release without dragging | Hide it for a few seconds (10 by default) |
 | Landscape | Hidden automatically |
 
+**10 button styles**, in Sailfish's look: floating ones you can put anywhere (e.g. glowing dot, thin ring, dotted chevron) and ones that stick to the left or right screen edge (edge glow, edge tab, halftone).
+
 Tap and swipe are both on by default. Either one can be switched off in the settings, but not both. Swipes count in the directions you pick (default: left and right; the direction is the one the swipe mostly goes in).
+
+**Matches your ambience:** with **Use system accent color** (at the top of OneBack's settings), the button takes Android's system accent color. On Sailfish OS (Jolla), this requires [ambience-sync](https://github.com/babooo/ambience-sync), which sets that color to the ambience color, so the button changes along with the ambience. Off by default.
 
 Tested on the Jolla Phone (2026), Sailfish OS 5.2.0.22, AppSupport (Android 15).
 
@@ -20,7 +24,7 @@ OneBack is an Android **accessibility service**, which is how it can send a syst
 
 - It **can't read screen content** (`canRetrieveWindowContent="false"`) and has no internet permission.
 - It asks for no other permissions. The button is an accessibility overlay, so "display over other apps" isn't needed.
-- The button is [`BackService.java`](src/dev/local/oneback/BackService.java), about 200 lines; the settings screen is [`MainActivity.java`](src/dev/local/oneback/MainActivity.java).
+- The button is [`BackService.java`](src/dev/local/oneback/BackService.java) (behaviour) and [`ButtonView.java`](src/dev/local/oneback/ButtonView.java) (drawing); the settings screen is [`MainActivity.java`](src/dev/local/oneback/MainActivity.java).
 
 ## Install
 
@@ -47,7 +51,7 @@ The switch can only be turned off while OneBack is on and allowed in the backgro
 
 ## Settings
 
-The OneBack app shows whether the button is on and has a blank test page to leave with the button. You can choose whether tap, swipe or both mean Back, and which swipe directions count. It also lets you set the button's size, opacity and how long a long press hides it. Changes apply to the button right away. It can also move the button back to its default position.
+The OneBack app shows whether the button is on and has a blank test page to leave with the button. At the top, **Use system accent color** colors the button with Android's accent color (with [ambience-sync](https://github.com/babooo/ambience-sync): the ambience color). Below it, **Button style** shows previews of all styles in two rows: floating, and at the edge (those snap to the nearer side and can be moved up and down). You can choose whether tap, swipe or both mean Back, and which swipe directions count. It also lets you set the button's size, opacity and how long a long press hides it. Changes apply to the button right away. It can also move the button back to its default position.
 
 ## Hide the Android navigation bar by hand
 

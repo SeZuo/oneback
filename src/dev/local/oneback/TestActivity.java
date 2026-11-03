@@ -1,6 +1,5 @@
 package dev.local.oneback;
 
-import android.app.Activity;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -12,7 +11,7 @@ import android.widget.Toolbar;
  * Blank page to leave with the floating button, to check that Back works.
  * The toolbar arrow is a fallback that closes the page without OneBack.
  */
-public class TestActivity extends Activity {
+public class TestActivity extends ClosingActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

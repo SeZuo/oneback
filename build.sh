@@ -16,7 +16,7 @@ rm -rf build && mkdir -p build/gen build/classes build/dex
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link -I "$JAR" --manifest AndroidManifest.xml -o build/base.apk build/res.zip \
     --java build/gen --min-sdk-version $MIN --target-sdk-version $TARGET \
-    --version-code 7 --version-name 1.6
+    --version-code 8 --version-name 1.7
 
 javac --release 17 -classpath "$JAR" -d build/classes \
     $(find src build/gen -name '*.java')

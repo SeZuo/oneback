@@ -3,7 +3,6 @@ package dev.local.oneback;
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
 import android.animation.ValueAnimator;
-import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -11,9 +10,15 @@ import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.method.LinkMovementMethod;
+import android.text.style.ClickableSpan;
 import android.util.Log;
 import android.util.TypedValue;
 import android.graphics.drawable.StateListDrawable;
@@ -21,6 +26,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -32,10 +39,13 @@ import android.widget.TextView;
  * a test page, gesture help, button size, opacity, hide time, and resetting the position. Values are written to
  * {@link Prefs} and the running service picks them up immediately.
  */
-public class MainActivity extends Activity {
+public class MainActivity extends ClosingActivity {
     private SharedPreferences prefs;
     private TextView status;
     private Switch tapSwitch, swipeSwitch;
+    private TextView styleLabel;
+    private final ButtonView[] previews = new ButtonView[ButtonView.COUNT];
+    private final FrameLayout[] tiles = new FrameLayout[ButtonView.COUNT];
     private final CheckBox[] dirBoxes = new CheckBox[4]; // order of Prefs.DIRS
     private View dirCentre;
     private Button toggle;
@@ -77,6 +87,8 @@ public class MainActivity extends Activity {
         // NEW_TASK: open Android Settings as its own app. Inside OneBack's task it would stay on
         // top, and tapping the OneBack icon would bring back Settings instead of this screen
         // (Sailfish waits for a OneBack window, times out and closes).
+        // OneBack's own screen closes behind it (ClosingActivity); Back from Settings goes to
+        // the home screen, and OneBack can be opened again from the launcher.
         toggle.setOnClickListener(v -> startActivity(
                 new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
@@ -95,6 +107,11 @@ public class MainActivity extends Activity {
         test.setText(R.string.open_test);
         test.setOnClickListener(v -> startActivity(new Intent(this, TestActivity.class)));
         col.addView(test);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) accentSwitch(col); // Android 12+
+
+        col.addView(heading(R.string.heading_style));
+        stylePicker(col);
 
         col.addView(heading(R.string.heading_gestures));
         tapSwitch = gestureSwitch(col, R.string.label_tap, Prefs.TAP, Prefs.tap(prefs));
@@ -138,7 +155,8 @@ public class MainActivity extends Activity {
         defaults.setText(R.string.reset_defaults);
         defaults.setOnClickListener(v -> {
             SharedPreferences.Editor ed = prefs.edit().remove(Prefs.SIZE).remove(Prefs.ALPHA)
-                    .remove(Prefs.HIDE).remove(Prefs.TAP).remove(Prefs.SWIPE);
+                    .remove(Prefs.HIDE).remove(Prefs.TAP).remove(Prefs.SWIPE)
+                    .remove(Prefs.ACCENT).remove(Prefs.STYLE);
             for (String d : Prefs.DIRS) ed.remove(d);
             ed.apply();
             recreate();
@@ -212,6 +230,106 @@ public class MainActivity extends Activity {
             if (me.equals(ComponentName.unflattenFromString(s))) return true;
         }
         return false;
+    }
+
+    /**
+     * Button in Android's system accent color, plus where that color comes from: the
+     * ambience-sync add-on sets it to the Sailfish ambience color.
+     */
+    private void accentSwitch(LinearLayout col) {
+        Switch accent = new Switch(this);
+        accent.setText(R.string.label_accent);
+        accent.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        accent.setTypeface(Typeface.DEFAULT_BOLD);
+        accent.setPadding(0, dp(16), 0, dp(4));
+        accent.setChecked(Prefs.accent(prefs));
+        accent.setOnCheckedChangeListener((b, checked) -> {
+            prefs.edit().putBoolean(Prefs.ACCENT, checked).apply();
+            updateStylePicker();
+        });
+        col.addView(accent);
+
+        String url = getString(R.string.ambience_sync_url);
+        String hint = getString(R.string.help_accent, url);
+        SpannableString s = new SpannableString(hint);
+        int at = hint.indexOf(url);
+        // NEW_TASK: the browser must not open inside OneBack's task, which closes as soon as
+        // OneBack is left (ClosingActivity) and would take the page with it.
+        s.setSpan(new ClickableSpan() {
+            @Override public void onClick(View v) {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://" + url))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            }
+        }, at, at + url.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        TextView t = text("", 14);
+        t.setText(s);
+        t.setMovementMethod(LinkMovementMethod.getInstance());
+        t.setAlpha(0.85f);
+        col.addView(t);
+    }
+
+    /**
+     * Style previews in two rows (each scrolls sideways): floating buttons, then the ones that
+     * stick to the screen edge. Tapping one selects it. Tiles are mid grey, so white glows and
+     * dark halftone dots both show. Edge styles sit at the tile's left edge.
+     */
+    private void stylePicker(LinearLayout col) {
+        styleLabel = text("", 16);
+        styleLabel.setPadding(0, dp(12), 0, dp(4));
+        col.addView(styleLabel);
+        styleRow(col, R.string.styles_floating, false);
+        styleRow(col, R.string.styles_edge, true);
+        updateStylePicker();
+    }
+
+    private void styleRow(LinearLayout col, int labelRes, boolean edge) {
+        TextView label = text(getString(labelRes), 14);
+        label.setAlpha(0.7f);
+        label.setPadding(0, dp(8), 0, dp(4));
+        col.addView(label);
+        String[] names = getResources().getStringArray(R.array.style_names);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < ButtonView.COUNT; i++) {
+            if (ButtonView.isEdge(i) != edge) continue;
+            FrameLayout tile = new FrameLayout(this);
+            ButtonView v = new ButtonView(this);
+            v.setStyle(i);
+            tile.addView(v, ButtonView.isEdge(i)
+                    ? new FrameLayout.LayoutParams(dp(40), dp(60), Gravity.START | Gravity.CENTER_VERTICAL)
+                    : new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
+            final int style = i;
+            tile.setContentDescription(names[i]);
+            tile.setOnClickListener(x -> {
+                prefs.edit().putInt(Prefs.STYLE, style).apply();
+                updateStylePicker();
+            });
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(dp(64), dp(72));
+            tlp.setMargins(0, 0, dp(8), 0);
+            row.addView(tile, tlp);
+            previews[i] = v;
+            tiles[i] = tile;
+        }
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.addView(row);
+        col.addView(scroll);
+    }
+
+    /** Selected tile outlined, name in the label, previews in the current colors. */
+    private void updateStylePicker() {
+        if (styleLabel == null) return;
+        int sel = Prefs.style(prefs);
+        String[] names = getResources().getStringArray(R.array.style_names);
+        styleLabel.setText(getString(R.string.label_style, names[sel]));
+        for (int i = 0; i < ButtonView.COUNT; i++) {
+            previews[i].applyColors(this, prefs);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(0xFF808080);
+            bg.setCornerRadius(dp(8));
+            if (i == sel) bg.setStroke(dp(3), 0xFFFFFFFF);
+            tiles[i].setBackground(bg);
+            tiles[i].setClipToOutline(true); // keep edge-style glows inside the rounded tile
+        }
     }
 
     private Switch gestureSwitch(LinearLayout col, int labelRes, String key, boolean on) {
