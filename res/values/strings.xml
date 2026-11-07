@@ -25,6 +25,7 @@
         <item>Halftone edge</item>
         <item>Halftone edge with arrow</item>
         <item>Halftone disc</item>
+        <item>Sailfish edge</item>
     </string-array>
     <string name="label_size">Size</string>
     <string name="label_accent">Use system accent color</string>
@@ -63,3 +64,4 @@
     <string name="g_landscape">Landscape</string>
     <string name="g_landscape_does">Hidden automatically</string>
 </resources>
+

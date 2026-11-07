@@ -27,13 +27,13 @@ import android.view.View;
 final class ButtonView extends View {
     static final int CLASSIC = 0, GLOW_DOT = 1, RING = 2, EDGE_GLOW = 3, DOTS = 4,
             GLOW_CHEVRON = 5, EDGE_TAB = 6, HALFTONE_EDGE = 7, HALFTONE_EDGE_CHEVRON = 8,
-            HALFTONE_DISC = 9;
-    static final int COUNT = 10;
+            HALFTONE_DISC = 9, SAILFISH_EDGE = 10;
+    static final int COUNT = 11;
     static final float EDGE_HEIGHT = 1.5f;
 
     static boolean isEdge(int style) {
         return style == EDGE_GLOW || style == EDGE_TAB || style == HALFTONE_EDGE
-                || style == HALFTONE_EDGE_CHEVRON;
+                || style == HALFTONE_EDGE_CHEVRON || style == SAILFISH_EDGE;
     }
 
     private static final int CLASSIC_FILL = 0xFF303030, ARMED = 0xFF1E88E5, WHITE = 0xFFFFFFFF,
@@ -118,6 +118,54 @@ final class ButtonView extends View {
                 case HALFTONE_EDGE:
                     halftone(c, ex, cy, r * 1.25f, dots, r * 0.13f, 0.35f);
                     break;
+                case SAILFISH_EDGE: {
+                    float tw = r * 1.25f, th = r * 1.6f, rad = r * 0.55f;
+                    rect.set(ex - tw, cy - th / 2, ex + tw, cy + th / 2); // background from ButtonView
+                    fill.setColor(0xBF1F1F21);
+                    c.drawRoundRect(rect, rad, rad, fill);
+                    stroke.setStrokeWidth(r * 0.05f);
+                    stroke.setColor(withAlpha(line, 0.9f));
+                    c.drawRoundRect(rect, rad, rad, stroke);
+
+                    // Dotted white bloom
+                    float cx = ex;
+                    float glowRadius = r * 1.4f;
+
+                    path.reset();
+                    path.addRoundRect(rect, rad, rad, Path.Direction.CW);
+
+                    c.save();
+                    c.clipPath(path);
+                    if (rightEdge) {
+                        c.clipRect(rect.left, rect.top, cx, rect.bottom);
+                    } else {
+                        c.clipRect(cx, rect.top, rect.right, rect.bottom);
+                    }
+
+                    fill.setShader(new RadialGradient(
+                            cx, cy,
+                            glowRadius,
+                            new int[] {
+                                    0xFFFFFFFF, // Pure white center dot core
+                                    0xF0FFFFFF, // Bright inner bloom
+                                    0x88FFFFFF, // Luminous halo
+                                    0x3AFFFFFF, // Soft ambient aura
+                                    0x0DFFFFFF, // Faint outer flare
+                                    0x00FFFFFF  // Seamless edge decay
+                            },
+                            new float[] { 0.0f, 0.12f, 0.28f, 0.50f, 0.78f, 1.0f },
+                            Shader.TileMode.CLAMP
+                    ));
+                    c.drawCircle(cx, cy, glowRadius, fill);
+                    fill.setShader(null);
+                    c.restore();
+
+                    float lineMargin = th * 0.15f;
+                    stroke.setStrokeWidth(r * 0.05f);
+                    stroke.setColor(withAlpha(line, 0.4f));
+                    c.drawLine(cx, cy - th / 2 + lineMargin, cx, cy + th / 2 - lineMargin, stroke);
+                    break;
+                }
                 default: // HALFTONE_EDGE_CHEVRON
                     halftone(c, ex, cy, r * 1.25f, dots, r * 0.13f, 0.35f);
                     chevron(c, ex + dir * r * 0.33f, cy, r * 0.65f, r * 0.1f, WHITE, 0.42f);
